@@ -117,7 +117,7 @@ export const PageFood: React.FC<PageFoodProps> = ({
           }
         `}
       >
-        Plan It! ✨
+        Plan Our Date ✨
       </motion.button>
     </motion.div>
   );

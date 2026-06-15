@@ -15,47 +15,121 @@ interface BurstHeart {
   rotation: number;
 }
 
+interface TempHeart {
+  id: number;
+  x: number;
+  y: number;
+  scale: number;
+  delay: number;
+}
+
+const RUNAWAY_MESSAGES = [
+  "🥺 Please don't click No...",
+  "👉👈 Are you sure, Mim? Give Rio a chance... ❤️",
+  "🌹 Please? It would make me really happy... 😊",
+  "🥹 Just one date... I promise it'll be fun! ✨",
+  "💖 Okay okay... one last try. Please say Yes? 🥺❤️",
+];
+
 export const PageProposal: React.FC<PageProposalProps> = ({ onAccept }) => {
   const [noPosition, setNoPosition] = useState({ x: 0, y: 0 });
   const [isAccepted, setIsAccepted] = useState(false);
   const [burstHearts, setBurstHearts] = useState<BurstHeart[]>([]);
   const [hasMoved, setHasMoved] = useState(false);
 
-  // Trigger runaway movement of the No button
+  // Pleading message and transformation states
+  const [noAttempts, setNoAttempts] = useState(0);
+  const [isTransformed, setIsTransformed] = useState(false);
+  const [messageHearts, setMessageHearts] = useState<TempHeart[]>([]);
+  const [showAcceptanceMessage, setShowAcceptanceMessage] = useState(false);
+  const [originalCoords, setOriginalCoords] = useState<{ left: number; top: number } | null>(null);
+
+  // Spawn small hearts around the message bubble when it updates
+  const spawnHearts = () => {
+    const newHearts: TempHeart[] = Array.from({ length: 10 }).map((_, i) => ({
+      id: Date.now() + i + Math.random(),
+      x: -80 + Math.random() * 160, // drift left/right
+      y: -40 - Math.random() * 80,  // float upwards
+      scale: 0.5 + Math.random() * 0.8,
+      delay: Math.random() * 0.15,
+    }));
+    setMessageHearts(newHearts);
+
+    // Clean up hearts after animation completes
+    setTimeout(() => {
+      setMessageHearts((prev) => prev.filter((h) => !newHearts.some((nh) => nh.id === h.id)));
+    }, 1500);
+  };
+
+  // Trigger runaway movement of the No button within screen boundaries
   const moveNoButton = () => {
-    setHasMoved(true);
-    
+    if (isTransformed || noAttempts >= 5) {
+      return;
+    }
+
+    const nextAttempts = noAttempts + 1;
+    setNoAttempts(nextAttempts);
+    spawnHearts();
+
     // Viewport dimensions
     const viewportWidth = window.innerWidth;
     const viewportHeight = window.innerHeight;
 
-    // We want the button to stay within the viewport but jump randomly.
-    // The button starts in a flex row. We'll generate an offset from its origin.
-    // Maximum offset is half the viewport size minus padding.
-    const maxOffsetW = viewportWidth / 2 - 100;
-    const maxOffsetH = viewportHeight / 2 - 100;
+    // Get actual button size, fallback to typical dimensions
+    const btn = document.getElementById("btn-no");
+    let width = 140;
+    let height = 55;
+    let currentLeft = 0;
+    let currentTop = 0;
 
-    const randomX = (Math.random() * 2 - 1) * maxOffsetW;
-    const randomY = (Math.random() * 2 - 1) * maxOffsetH;
+    if (btn) {
+      const rect = btn.getBoundingClientRect();
+      width = rect.width;
+      height = rect.height;
+      currentLeft = rect.left;
+      currentTop = rect.top;
+    }
 
-    // Safety check: ensure it moves at least 100px away from current position to look like a jump
-    const distance = Math.hypot(randomX - noPosition.x, randomY - noPosition.y);
-    if (distance < 150) {
-      // Add a bit more offset if too close
-      setNoPosition({
-        x: randomX + (randomX > 0 ? 100 : -100),
-        y: randomY + (randomY > 0 ? 100 : -100),
-      });
-    } else {
-      setNoPosition({ x: randomX, y: randomY });
+    // Capture original static coordinates on first move
+    let refLeft = originalCoords?.left ?? currentLeft;
+    let refTop = originalCoords?.top ?? currentTop;
+
+    if (!originalCoords && currentLeft !== 0) {
+      setOriginalCoords({ left: currentLeft, top: currentTop });
+      refLeft = currentLeft;
+      refTop = currentTop;
+    }
+
+    const padding = 24;
+    const maxX = viewportWidth - width - padding * 2;
+    const maxY = viewportHeight - height - padding * 2;
+
+    // Constrain random coordinates within safe viewport boundaries
+    const absX = padding + Math.random() * Math.max(0, maxX);
+    const absY = padding + Math.random() * Math.max(0, maxY);
+
+    // Calculate relative offsets from original DOM position
+    const offsetX = absX - refLeft;
+    const offsetY = absY - refTop;
+
+    setNoPosition({ x: offsetX, y: offsetY });
+    setHasMoved(true);
+
+    // After 5 attempts, trigger auto-transformation back to relative flow and turn into YES
+    if (nextAttempts === 5) {
+      setTimeout(() => {
+        setIsTransformed(true);
+        setHasMoved(false); // Smoothly slides back to its original layout position (0, 0)
+        setNoPosition({ x: 0, y: 0 });
+      }, 2000);
     }
   };
 
   const handleYesClick = () => {
     setIsAccepted(true);
+    setShowAcceptanceMessage(true);
 
     // 1. Confetti celebration
-    // Single main burst
     confetti({
       particleCount: 150,
       spread: 80,
@@ -66,7 +140,7 @@ export const PageProposal: React.FC<PageProposalProps> = ({ onAccept }) => {
     // Side showers
     const duration = 2 * 1000;
     const animationEnd = Date.now() + duration;
-    const defaults = { startVelocity: 30, spread: 360, ticks: 60, zIndex: 50 };
+    const defaults = { startVelocity: 30, spread: 360, ticks: 60, zIndex: 60 };
 
     const interval: any = setInterval(() => {
       const timeLeft = animationEnd - Date.now();
@@ -92,18 +166,51 @@ export const PageProposal: React.FC<PageProposalProps> = ({ onAccept }) => {
     });
     setBurstHearts(hearts);
 
-    // 3. Page transition after animations settle
+    // 3. Page transition after acceptance screen settles
     setTimeout(() => {
       onAccept();
-    }, 1600);
+    }, 2500);
   };
 
   return (
     <div className="relative flex flex-col items-center justify-center min-h-[80vh] w-full max-w-2xl px-6 text-center z-10 select-none">
       
+      {/* Full screen acceptance message overlay */}
+      <AnimatePresence>
+        {showAcceptanceMessage && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 bg-white/95 backdrop-blur-md z-50 flex flex-col items-center justify-center p-6"
+          >
+            <motion.div
+              initial={{ scale: 0.3, opacity: 0 }}
+              animate={{ scale: [0.3, 1.15, 1], opacity: 1 }}
+              transition={{ duration: 0.8, ease: "easeOut" }}
+              className="flex flex-col items-center max-w-md text-center"
+            >
+              <motion.div
+                animate={{ y: [0, -15, 0], scale: [1, 1.1, 1] }}
+                transition={{ repeat: Infinity, duration: 1.5, ease: "easeInOut" }}
+                className="text-7xl mb-8 filter drop-shadow-[0_10px_20px_rgba(255,79,139,0.3)]"
+              >
+                💖🎉
+              </motion.div>
+              <h2 className="font-serif font-black text-3xl md:text-4xl text-[#ff4f8b] leading-tight mb-4 drop-shadow-sm">
+                Yay! I knew you'd say yes, Mim! ❤️
+              </h2>
+              <p className="font-sans font-semibold text-gray-400 text-sm mt-2 animate-pulse">
+                Setting up our date plan... ✨
+              </p>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
       {/* Heart Burst Canvas */}
       <AnimatePresence>
-        {isAccepted && (
+        {isAccepted && !showAcceptanceMessage && (
           <div className="absolute inset-0 pointer-events-none z-50 flex items-center justify-center">
             {burstHearts.map((heart) => (
               <motion.div
@@ -174,9 +281,40 @@ export const PageProposal: React.FC<PageProposalProps> = ({ onAccept }) => {
         </motion.div>
 
         {/* Serif Romantic Heading */}
-        <h1 className="font-serif font-black text-4xl md:text-5xl lg:text-6xl text-gray-800 tracking-tight leading-tight mb-12 max-w-xl">
+        <h1 className="font-serif font-black text-4xl md:text-5xl lg:text-6xl text-gray-800 tracking-tight leading-tight mb-8 max-w-xl">
           Will you go on a date with Rio?
         </h1>
+
+        {/* Message bubble for attempts */}
+        <div className="min-h-[60px] w-full flex items-center justify-center mb-6">
+          <AnimatePresence mode="wait">
+            {noAttempts > 0 && !showAcceptanceMessage && (
+              <motion.div
+                key={noAttempts}
+                initial={{ opacity: 0, y: 10, scale: 0.95 }}
+                animate={{ opacity: 1, y: 0, scale: 1 }}
+                exit={{ opacity: 0, y: -10, scale: 0.95 }}
+                transition={{ duration: 0.3 }}
+                className="relative px-6 py-3 bg-pink-50/90 border border-pink-100/70 rounded-2xl text-[#ff4f8b] font-bold shadow-[0_4px_12px_rgba(255,79,139,0.06)] text-sm md:text-base flex items-center justify-center"
+              >
+                {/* Floating Heart Particle Effect for message */}
+                {messageHearts.map((heart) => (
+                  <motion.span
+                    key={heart.id}
+                    initial={{ x: 0, y: 0, opacity: 1, scale: 0 }}
+                    animate={{ x: heart.x, y: heart.y, opacity: 0, scale: heart.scale }}
+                    transition={{ duration: 1.2, delay: heart.delay, ease: "easeOut" }}
+                    className="absolute text-pink-400 pointer-events-none select-none text-xl"
+                    style={{ left: "50%", top: "50%", transform: "translate(-50%, -50%)" }}
+                  >
+                    ❤️
+                  </motion.span>
+                ))}
+                {RUNAWAY_MESSAGES[noAttempts - 1]}
+              </motion.div>
+            )}
+          </AnimatePresence>
+        </div>
 
         {/* Actions Button Row */}
         <div className="relative flex flex-row items-center justify-center gap-6 min-h-[80px] w-full">
@@ -187,36 +325,42 @@ export const PageProposal: React.FC<PageProposalProps> = ({ onAccept }) => {
             whileHover={{ scale: 1.12 }}
             whileTap={{ scale: 0.95 }}
             onClick={handleYesClick}
-            className="px-8 py-3.5 bg-[#ff4f8b] hover:bg-[#e03b73] text-white text-lg font-semibold rounded-full shadow-[0_8px_24px_rgba(255,79,139,0.35)] transition-colors duration-250 cursor-pointer z-10 flex items-center gap-2"
+            className="px-8 py-3.5 bg-gradient-to-r from-[#ff4f8b] to-[#ff6b9d] hover:from-[#e03b73] hover:to-[#ff4f8b] text-white text-lg font-semibold rounded-full shadow-[0_8px_24px_rgba(255,79,139,0.35)] transition-all duration-250 cursor-pointer z-10 flex items-center gap-2"
           >
-            Yes 💖
+            {isTransformed ? "💕 YES" : "Yes 💖"}
           </motion.button>
 
           {/* RUNAWAY NO Button */}
           <motion.button
             id="btn-no"
             type="button"
-            onMouseEnter={moveNoButton}
-            onHoverStart={moveNoButton}
-            onClick={moveNoButton}
-            onTouchStart={moveNoButton}
-            onFocus={moveNoButton}
+            onMouseEnter={isTransformed ? undefined : moveNoButton}
+            onHoverStart={isTransformed ? undefined : moveNoButton}
+            onClick={isTransformed ? handleYesClick : moveNoButton}
+            onTouchStart={isTransformed ? undefined : moveNoButton}
+            onFocus={isTransformed ? undefined : moveNoButton}
             animate={{
               x: noPosition.x,
               y: noPosition.y,
-              position: hasMoved ? ("fixed" as any) : ("relative" as any),
+            }}
+            style={{
+              position: "relative",
             }}
             transition={{
               type: "spring",
-              stiffness: 220,
-              damping: 14,
-              mass: 0.8,
+              stiffness: 180,
+              damping: 9,
+              mass: 0.6,
             }}
-            className={`px-8 py-3.5 bg-white border border-gray-200 text-gray-600 text-lg font-semibold rounded-full hover:bg-gray-50 transition-colors duration-250 z-20 outline-none
-              ${hasMoved ? "left-[50%] top-[50%] -translate-x-[50%] -translate-y-[50%] shadow-[0_8px_24px_rgba(0,0,0,0.08)]" : "relative"}
+            className={`px-8 py-3.5 text-lg font-semibold rounded-full transition-colors duration-250 z-20 outline-none cursor-pointer
+              ${isTransformed 
+                ? "bg-gradient-to-r from-[#ff4f8b] to-[#ff6b9d] hover:from-[#e03b73] hover:to-[#ff4f8b] text-white shadow-[0_8px_24px_rgba(255,79,139,0.35)]" 
+                : "bg-white border border-gray-200 text-gray-600 hover:bg-gray-50 shadow-[0_4px_12px_rgba(0,0,0,0.05)]"
+              }
+              ${hasMoved && !isTransformed ? "shadow-[0_8px_24px_rgba(255,79,139,0.12)]" : ""}
             `}
           >
-            No
+            {isTransformed ? "💕 YES" : "No"}
           </motion.button>
         </div>
       </motion.div>

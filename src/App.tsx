@@ -94,7 +94,7 @@ function App() {
 
               {/* Progress Heart Indicator */}
               <span className="font-sans font-bold text-xs uppercase tracking-widest text-[#ff4f8b]">
-                {page === 4 ? "Planned! 🎉" : `Step ${page - 1} of 2`}
+                {page === 4 ? "100% Complete" : `Step ${page - 1} of 2`}
               </span>
 
               {page === 4 ? (
@@ -157,6 +157,7 @@ function App() {
               selectedDate={selectedDate}
               selectedTime={selectedTime}
               selectedFoods={selectedFoods}
+              onReset={handleReset}
             />
           )}
         </AnimatePresence>
